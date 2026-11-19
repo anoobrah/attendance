@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#eef2f0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1412" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Class attendance tracker: every class counts as present unless you mark it absent; attach medical reports to excused absences.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Attendance">
+<title>Attendance Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root {
+  --bg: #eef2f0; --surface: #ffffff; --sunk: #f4f7f5; --ink: #111a17; --muted: #586660;
+  --line: #d8e0dc; --accent: #17705c; --accent-ink: #ffffff;
+  --absent: #c2413b; --medical: #2f66c9; --cancel: #8a8f96; --ok: #17705c; --warn: #b7791f;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1412; --surface: #151e1b; --sunk: #101815; --ink: #e5ece9; --muted: #95a39d;
+  --line: #24312c; --accent: #5cc7a6; --accent-ink: #0d1412;
+  --absent: #f07a72; --medical: #86a9ff; --cancel: #8f959c; --ok: #5cc7a6; --warn: #e3b05a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0d1412; --surface: #151e1b; --sunk: #101815; --ink: #e5ece9; --muted: #95a39d;
+  --line: #24312c; --accent: #5cc7a6; --accent-ink: #0d1412;
+  --absent: #f07a72; --medical: #86a9ff; --cancel: #8f959c; --ok: #5cc7a6; --warn: #e3b05a; color-scheme: dark }
+
+* { box-sizing: border-box }
+html { -webkit-text-size-adjust: 100% }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5 }
+[hidden] { display: none !important }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 18px 96px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 14px }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: 27px; letter-spacing: -0.01em; margin: 0 }
+h2 { font-family: var(--f-display); font-weight: 600; font-size: 17px; margin: 0 0 12px; text-wrap: balance }
+h3 { font-size: 14px; margin: 0 }
+.sub { font-size: 13px; color: var(--muted) }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums }
+
+/* tabs: top on wide screens, bottom bar on phones */
+nav.tabs { display: flex; gap: 4px; background: var(--sunk); border: 1px solid var(--line); border-radius: 11px; padding: 4px; margin-bottom: 16px }
+nav.tabs button { flex: 1; border: 0; background: none; padding: 8px 6px; border-radius: 8px; cursor: pointer; font: 500 14px var(--f-body); color: var(--muted); min-width: 0 }
+nav.tabs button[aria-selected=true] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08) }
+@media (max-width: 640px) {
+  nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; margin: 0; border-radius: 0; border-width: 1px 0 0;
+    padding: 6px max(8px, env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom, 0px)); background: var(--surface) }
+  nav.tabs button { padding: 10px 4px; font-size: 13.5px }
+}
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; min-width: 0; margin-bottom: 14px }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); gap: 14px }
+.grid2 > .panel { margin: 0 }
+
+input, select, button, textarea { font: inherit; color: inherit }
+input[type=text], input[type=date], input[type=time], input[type=number], select, textarea {
+  background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; min-width: 0 }
+input[type=color] { width: 40px; height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--sunk); cursor: pointer; flex: none }
+input:focus-visible, select:focus-visible, button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600; font-size: 14px; white-space: nowrap }
+.btn:hover { border-color: var(--muted) }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink) }
+.btn.small { padding: 5px 10px; font-size: 13px }
+.mini { border: 1px solid transparent; background: none; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 12.5px; color: var(--muted) }
+.mini:hover { border-color: var(--line); color: var(--ink) }
+.mini.danger.confirm { color: var(--absent); border-color: var(--absent) }
+.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font-weight: 600; font-size: 13px; text-decoration: underline; text-underline-offset: 2px }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); min-width: 0 }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }
+.form .full { grid-column: 1 / -1 }
+.msg { font-size: 12.5px; color: var(--muted) }
+.empty { border: 1px dashed var(--line); border-radius: 8px; padding: 18px; color: var(--muted); font-size: 14px; text-align: center }
+.dot { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block }
+
+/* Today */
+.daynav { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; margin-bottom: 12px }
+.daynav .btn { padding: 8px 12px }
+.day-title { font-family: var(--f-display); font-weight: 600; font-size: 19px; margin: 0 0 2px }
+.offday { display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; font-size: 14px; flex-wrap: wrap }
+.offday input[type=text] { flex: 1; min-width: 140px }
+.cls { display: grid; grid-template-columns: 4px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-top: 1px solid var(--line) }
+.cls:first-of-type { border-top: 0 }
+.cls .bar { border-radius: 2px }
+.cls .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap }
+.cls .nm { font-weight: 600 }
+.cls .tm { font-family: var(--f-mono); font-size: 12.5px; color: var(--muted) }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-top: 8px; background: var(--sunk) }
+.seg button { border: 0; border-left: 1px solid var(--line); background: none; padding: 7px 12px; cursor: pointer; font: 500 13.5px var(--f-body); color: var(--muted) }
+.seg button:first-child { border-left: 0 }
+.seg button[aria-pressed=true] { color: #fff; font-weight: 600 }
+.seg button[data-s=present][aria-pressed=true] { background: var(--ok); color: var(--accent-ink) }
+.seg button[data-s=absent][aria-pressed=true] { background: var(--absent) }
+.seg button[data-s=medical][aria-pressed=true] { background: var(--medical) }
+.seg button[data-s=cancelled][aria-pressed=true] { background: var(--cancel) }
+.rep-line { font-size: 13px; margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap }
+.pill.absent { color: var(--absent) } .pill.medical { color: var(--medical) } .pill.cancelled { color: var(--cancel) } .pill.present { color: var(--ok) }
+.pill.warn { color: var(--warn) }
+.future-note { font-size: 12px; color: var(--muted); margin-top: 6px }
+
+/* Courses */
+.ccard .hd { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start }
+.big { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: 30px; font-weight: 600; line-height: 1.1 }
+.meter { position: relative; height: 10px; background: var(--sunk); border-radius: 5px; overflow: hidden; margin: 12px 0 6px }
+.meter > div { height: 100% }
+.meter .min { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); opacity: .6 }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 10px }
+.stats div { background: var(--sunk); border-radius: 8px; padding: 6px 8px }
+.stats b { display: block; font-family: var(--f-mono); font-size: 16px }
+.stats span { font-size: 11.5px; color: var(--muted) }
+.callout { margin-top: 10px; font-size: 13.5px; padding: 8px 10px; border-radius: 8px; background: var(--sunk); border-left: 3px solid var(--ok) }
+.callout.warn { border-left-color: var(--warn) } .callout.bad { border-left-color: var(--absent) }
+details.hist { margin-top: 10px }
+details.hist summary { cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--accent) }
+.hrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13.5px }
+.hrow select { width: auto; padding: 4px 8px; font-size: 13px }
+.hrow .d { font-family: var(--f-mono); font-size: 12.5px }
+.hrow small { display: block; color: var(--muted); font-size: 12px }
+
+/* Reports */
+.rep { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-top: 1px solid var(--line) }
+.rep:first-of-type { border-top: 0 }
+.thumb { width: 64px; height: 64px; border-radius: 8px; background: var(--sunk); border: 1px solid var(--line); display: grid; place-items: center; overflow: hidden; font-family: var(--f-mono); font-size: 12px; color: var(--muted); text-decoration: none }
+.thumb img { width: 100%; height: 100%; object-fit: cover }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--sunk); border: 1px solid var(--line); white-space: nowrap }
+.pick { max-height: 300px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--sunk) }
+.pick label { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13.5px; cursor: pointer }
+.pick label:last-child { border-bottom: 0 }
+.pick input { width: 16px; height: 16px; margin: 0 }
+.pick .d { font-family: var(--f-mono); font-size: 12px; color: var(--muted) }
+
+/* Setup */
+.course-ed { border: 1px solid var(--line); border-radius: 9px; padding: 12px; margin-bottom: 10px; background: var(--sunk) }
+.course-ed .r1 { display: grid; grid-template-columns: 40px minmax(0, 110px) minmax(0, 1fr); gap: 8px; align-items: center }
+.slot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; margin-top: 8px; align-items: center }
+.slot select, .slot input, .course-ed input[type=text] { background: var(--surface) }
+.course-ed .r3 { display: flex; justify-content: space-between; margin-top: 10px; gap: 8px; flex-wrap: wrap }
+.offlist { display: flex; flex-direction: column; gap: 4px; margin-top: 8px }
+.offlist div { display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; padding: 4px 0; border-bottom: 1px solid var(--line) }
+
+.toast { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg);
+  padding: 10px 16px; border-radius: 8px; font-size: 14px; z-index: 20; max-width: calc(100% - 32px) }
+@media (max-width: 520px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .seg button { padding: 7px 9px; font-size: 13px }
+  .form { grid-template-columns: 1fr }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Attendance</h1>
+    <span class="sub" id="semLabel"></span>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" data-tab="today" aria-selected="true">Today</button>
+    <button role="tab" data-tab="courses" aria-selected="false">Courses</button>
+    <button role="tab" data-tab="reports" aria-selected="false">Reports</button>
+    <button role="tab" data-tab="setup" aria-selected="false">Setup</button>
+  </nav>
+
+  <!-- TODAY -->
+  <section id="tab-today">
+    <div class="panel">
+      <div class="daynav">
+        <button class="btn" id="dPrev" aria-label="Previous day">‹</button>
+        <input type="date" id="dPick" aria-label="Day">
+        <button class="btn" id="dNext" aria-label="Next day">›</button>
+        <button class="btn" id="dToday">Today</button>
+      </div>
+      <p class="day-title" id="dTitle"></p>
+      <p class="sub" style="margin:0">Every class counts as present. Only mark the ones you missed.</p>
+      <div class="offday" id="offBox">
+        <label class="row" style="gap:8px;cursor:pointer"><input type="checkbox" id="offChk"> No classes this day (holiday or off day)</label>
+        <input type="text" id="offNote" placeholder="Reason, e.g. Victory Day" maxlength="60" hidden>
+      </div>
+      <div id="dayList"></div>
+      <details style="margin-top:12px">
+        <summary class="sub" style="cursor:pointer;font-weight:600">Add an extra or makeup class on this day</summary>
+        <div class="row" style="margin-top:10px">
+          <select id="xCourse" style="flex:2;min-width:140px"></select>
+          <input type="time" id="xTime" style="flex:1;min-width:110px" aria-label="Time">
+          <button class="btn" id="xAdd">Add class</button>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- COURSES -->
+  <section id="tab-courses" hidden>
+    <div id="courseCards" class="grid2"></div>
+  </section>
+
+  <!-- REPORTS -->
+  <section id="tab-reports" hidden>
+    <div class="panel">
+      <h2 id="rFormH">Add a medical report</h2>
+      <form class="form" id="rForm" novalidate>
+        <label class="f full">Report file (photo or PDF)
+          <input type="file" id="rFile" accept="image/*,application/pdf">
+        </label>
+        <span class="msg full" id="rFileNow" hidden></span>
+        <label class="f">Date on the report<input type="date" id="rDate"></label>
+        <label class="f">Note<input type="text" id="rNote" maxlength="120" placeholder="e.g. Fever, medical centre"></label>
+        <div class="full">
+          <div class="row" style="justify-content:space-between;margin-bottom:6px">
+            <span class="msg" style="font-weight:600;color:var(--ink)">Which classes does it cover?</span>
+            <label class="row msg" style="gap:6px;cursor:pointer"><input type="checkbox" id="rAll"> Show present classes too</label>
+          </div>
+          <div class="pick" id="rPick"></div>
+          <p class="msg" style="margin:6px 0 0">Ticked classes are marked Medical, so they don't count against you.</p>
+        </div>
+        <div class="row full">
+          <button class="btn primary" type="submit" id="rSave">Save report</button>
+          <button class="btn" type="button" id="rCancel" hidden>Cancel edit</button>
+          <span class="msg" id="rMsg"></span>
+        </div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Saved reports</h2>
+      <div id="rList"></div>
+    </div>
+  </section>
+
+  <!-- SETUP -->
+  <section id="tab-setup" hidden>
+    <div class="panel">
+      <h2>Semester</h2>
+      <div class="form">
+        <label class="f full">Name<input type="text" id="sName" maxlength="40" placeholder="e.g. 2-1, Fall 2026"></label>
+        <label class="f">First day of classes<input type="date" id="sStart"></label>
+        <label class="f">Last day of classes (optional)<input type="date" id="sEnd"></label>
+        <label class="f">Attendance marks<input type="number" id="sWeight" min="0" max="100" step="0.5"></label>
+        <label class="f">Minimum attendance (%)<input type="number" id="sMin" min="0" max="100" step="1"></label>
+      </div>
+      <p class="msg" style="margin:10px 0 0">Marks are estimated as your attendance % × the attendance marks. Medical absences are left out of the count.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Courses and weekly timetable</h2>
+      <div id="courseEd"></div>
+      <button class="btn" id="cAdd">+ Add course</button>
+    </div>
+
+    <div class="panel">
+      <h2>Off days</h2>
+      <p class="msg" style="margin:0">Holidays you've marked from the Today tab. Classes on these days don't count.</p>
+      <div class="offlist" id="offList"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Your data</h2>
+      <p class="msg" style="margin:0 0 10px">Everything, including report files, is stored in this browser on this device only. Back up now and then.</p>
+      <div class="row">
+        <button class="btn" id="exportBtn">Export CSV</button>
+        <button class="btn" id="backupBtn">Back up</button>
+        <button class="btn" id="restoreBtn">Restore</button>
+        <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+      </div>
+      <p class="msg" id="dataMsg" style="margin:8px 0 0"></p>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* ---------- constants & helpers ---------- */
+const LS_KEY = "attendance-tracker-v1";
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_ORDER = [6, 0, 1, 2, 3, 4, 5]; // Sat first, as many Bangladeshi timetables do
+const COLORS = ["#2f66c9", "#c2413b", "#17705c", "#b7791f", "#7b4fc9", "#c24f8f", "#2b8aa0", "#6b7f2a"];
+const STATUS = { present: "Present", absent: "Absent", medical: "Medical", cancelled: "Cancelled" };
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pad = n => String(n).padStart(2, "0");
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseYmd = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const addDaysStr = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
+const todayStr = () => ymd(new Date());
+const fmtDay = s => parseYmd(s).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+const fmtShort = s => parseYmd(s).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+const fmtTime = t => { if (!t) return ""; const [h, m] = t.split(":").map(Number); return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); };
+const fmtSize = b => b > 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+
+function toast(msg) {
+  const el = $("toast"); el.textContent = msg; el.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 2600);
+}
+
+/* ---------- state ---------- */
+function blankState() {
+  return {
+    semester: { name: "", start: "", end: "" },
+    rules: { weight: 10, min: 75 },
+    courses: [],
+    marks: {},      // occId -> { s: status, r: [reportIds] }
+    extras: [],     // { id, courseId, date, time }
+    offDays: {},    // "YYYY-MM-DD" -> note
+    reports: [],    // { id, date, note, fileName, fileType, size, occ: [occIds] }
+  };
+}
+let S = blankState();
+let tab = "today", day = todayStr();
+let editingReport = null, preselect = new Set();
+
+function save() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(S)); }
+  catch (e) { toast("Couldn't save. Browser storage may be full or blocked."); }
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) S = { ...blankState(), ...JSON.parse(raw) };
+  } catch (e) {}
+}
+
+/* report files live in IndexedDB (too big for localStorage) */
+let dbp = null;
+function db() {
+  if (!dbp) dbp = new Promise((res, rej) => {
+    const r = indexedDB.open("attendance-files", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("files");
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  return dbp;
+}
+async function fileOp(mode, fn) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const t = d.transaction("files", mode); const req = fn(t.objectStore("files"));
+    t.oncomplete = () => res(req && req.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+  });
+}
+const putFile = (id, blob) => fileOp("readwrite", s => s.put(blob, id));
+const getFile = id => fileOp("readonly", s => s.get(id));
+const delFile = id => fileOp("readwrite", s => s.delete(id));
+const urlCache = {};
+async function fileUrl(id) {
+  if (urlCache[id]) return urlCache[id];
+  try { const b = await getFile(id); if (b) return (urlCache[id] = URL.createObjectURL(b)); } catch (e) {}
+  return null;
+}
+
+/* ---------- class occurrences ---------- */
+const courseOf = id => S.courses.find(c => c.id === id) || { id, code: "?", name: "Removed course", color: "#8a8f96", slots: [] };
+// occId = courseId@date@time  (extras: courseId@date@x<id>)
+function occsOn(date) {
+  const wd = parseYmd(date).getDay(), out = [];
+  if (S.semester.start && date < S.semester.start) return out;
+  if (S.semester.end && date > S.semester.end) return out;
+  for (const c of S.courses) for (const sl of c.slots || [])
+    if (+sl.day === wd) out.push({ id: `${c.id}@${date}@${sl.time || ""}`, courseId: c.id, date, time: sl.time || "" });
+  for (const x of S.extras) if (x.date === date && S.courses.some(c => c.id === x.courseId))
+    out.push({ id: `${x.courseId}@${date}@x${x.id}`, courseId: x.courseId, date, time: x.time || "", extra: x.id });
+  return out.sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
+}
+function occFromId(id) {
+  const [courseId, date, rest] = id.split("@");
+  if (rest && rest.startsWith("x")) { const x = S.extras.find(e => e.id === rest.slice(1)); return { id, courseId, date, time: x ? x.time : "", extra: rest.slice(1) }; }
+  return { id, courseId, date, time: rest || "" };
+}
+function statusOf(o) {
+  const m = S.marks[o.id];
+  if (m && m.s) return m.s;
+  if (S.offDays[o.date] !== undefined) return "cancelled";
+  return "present";
+}
+const occTime = o => { const d = parseYmd(o.date); if (o.time) { const [h, m] = o.time.split(":").map(Number); d.setHours(h, m); } return d.getTime(); };
+const isHeld = (o, now) => occTime(o) <= now;
+
+function allOccs(from, to) {
+  const out = [];
+  if (!from || !to || from > to) return out;
+  for (let d = from; d <= to; d = addDaysStr(d, 1)) out.push(...occsOn(d));
+  return out;
+}
+
+function setMark(occId, s, keepReports) {
+  const m = S.marks[occId] || {};
+  const r = keepReports === false ? [] : (m.r || []);
+  if (s === "present" && !r.length) { const copy = { ...S.marks }; delete copy[occId]; S.marks = copy; }
+  else S.marks = { ...S.marks, [occId]: { s, r } };
+}
+
+/* ---------- maths ---------- */
+function courseStats(c) {
+  const now = Date.now(), start = S.semester.start;
+  const r = { held: 0, present: 0, absent: 0, medical: 0, cancelled: 0, remaining: 0, missingReport: 0 };
+  if (!start) return { ...r, pct: null };
+  const last = S.semester.end || todayStr();
+  const to = todayStr() < last ? todayStr() : last;
+  const past = allOccs(start, to).filter(o => o.courseId === c.id);
+  for (const o of past) {
+    if (!isHeld(o, now)) { if (statusOf(o) !== "cancelled") r.remaining++; continue; }
+    const s = statusOf(o); r[s]++;
+    if (s !== "cancelled") r.held++;
+    if (s === "medical" && !((S.marks[o.id] || {}).r || []).length) r.missingReport++;
+  }
+  if (S.semester.end && S.semester.end > to)
+    r.remaining += allOccs(addDaysStr(to, 1), S.semester.end).filter(o => o.courseId === c.id && statusOf(o) !== "cancelled").length;
+  const counted = r.held - r.medical;                     // medical absences are excused
+  r.pct = counted > 0 ? r.present / counted : null;
+  const min = S.rules.min / 100;
+  // how many more classes can be missed and still finish at or above the minimum
+  if (S.semester.end) {
+    const denom = counted + r.remaining;
+    r.canMiss = min > 0 ? Math.floor(r.present + r.remaining - min * denom + 1e-9) : r.remaining;
+    r.finalIfAll = denom > 0 ? (r.present + r.remaining) / denom : null;
+  } else {
+    r.canMiss = min > 0 ? Math.floor(r.present / min - counted + 1e-9) : Infinity;
+  }
+  return r;
+}
+
+/* ---------- render: Today ---------- */
+function renderToday() {
+  $("dPick").value = day;
+  $("dTitle").textContent = (day === todayStr() ? "Today · " : "") + fmtDay(day);
+  const off = S.offDays[day] !== undefined;
+  $("offChk").checked = off; $("offNote").hidden = !off;
+  if (document.activeElement !== $("offNote")) $("offNote").value = off ? S.offDays[day] : "";
+  $("xCourse").innerHTML = S.courses.map(c => `<option value="${esc(c.id)}">${esc(c.code || c.name)}</option>`).join("");
+
+  if (!S.courses.length || !S.semester.start) {
+    $("offBox").hidden = true;
+    $("dayList").innerHTML = `<div class="empty">Start in <button class="link" data-goto="setup">Setup</button>: enter your semester's first day and add your courses with their weekly times.</div>`;
+    return;
+  }
+  $("offBox").hidden = false;
+  const list = occsOn(day), now = Date.now();
+  if (!list.length) {
+    const outside = (S.semester.start && day < S.semester.start) || (S.semester.end && day > S.semester.end);
+    $("dayList").innerHTML = `<div class="empty">${outside ? "This day is outside the semester dates set in Setup." : "No classes on your timetable this day."}</div>`;
+    return;
+  }
+  $("dayList").innerHTML = list.map(o => {
+    const c = courseOf(o.courseId), s = statusOf(o), m = S.marks[o.id] || {};
+    const reps = (m.r || []).map(id => S.reports.find(r => r.id === id)).filter(Boolean);
+    let rep = "";
+    if (s === "medical") rep = reps.length
+      ? `<div class="rep-line"><span class="pill medical">Report attached</span>${reps.map(r => `<button class="link" data-openrep="${esc(r.id)}">${esc(r.fileName)}</button>`).join(" ")}</div>`
+      : `<div class="rep-line"><span class="pill warn">No report yet</span><button class="link" data-attach="${esc(o.id)}">Attach a report</button></div>`;
+    return `<div class="cls"><div class="bar" style="background:${esc(c.color)}"></div><div>
+      <div class="top"><span class="nm">${esc(c.code)}${c.name ? ` <span class="sub" style="font-weight:400">${esc(c.name)}</span>` : ""}</span>
+        <span class="tm">${o.time ? fmtTime(o.time) : "time not set"}${o.extra ? " · extra" : ""}</span></div>
+      <div class="seg" role="group" aria-label="Attendance for ${esc(c.code)}">
+        ${Object.keys(STATUS).map(k => `<button data-occ="${esc(o.id)}" data-s="${k}" aria-pressed="${s === k}">${STATUS[k]}</button>`).join("")}
+      </div>
+      ${rep}
+      ${!isHeld(o, now) && s === "present" ? `<div class="future-note">Not held yet. You can mark a planned absence ahead of time.</div>` : ""}
+      ${o.extra ? `<div style="margin-top:6px"><button class="mini danger" data-rmextra="${esc(o.extra)}">Remove this extra class</button></div>` : ""}
+    </div></div>`;
+  }).join("");
+}
+
+/* ---------- render: Courses ---------- */
+function renderCourses() {
+  if (!S.courses.length || !S.semester.start) {
+    $("courseCards").innerHTML = `<div class="panel empty">Add your semester and courses in <button class="link" data-goto="setup">Setup</button> to see attendance here.</div>`;
+    return;
+  }
+  const min = S.rules.min, now = Date.now();
+  $("courseCards").innerHTML = S.courses.map(c => {
+    const st = courseStats(c), pct = st.pct;
+    const pctTxt = pct === null ? "—" : (pct * 100).toFixed(pct === 1 ? 0 : 1) + "%";
+    const col = pct === null ? "var(--muted)" : pct * 100 >= min ? "var(--ok)" : pct * 100 >= min - 5 ? "var(--warn)" : "var(--absent)";
+    const marks = pct === null ? null : S.rules.weight * pct;
+    let call = "";
+    if (pct !== null) {
+      if (st.canMiss < 0) call = `<div class="callout bad">${S.semester.end ? `Even attending every remaining class, you'd finish at ${(st.finalIfAll * 100).toFixed(1)}%, below ${min}%. A medical report for a missed class would help.` : `You're below ${min}%. Attend the next classes to bring it back up.`}</div>`;
+      else if (st.canMiss === 0) call = `<div class="callout warn">You can't miss any more ${esc(c.code)} classes without going below ${min}%.</div>`;
+      else if (isFinite(st.canMiss)) call = `<div class="callout">You can miss ${st.canMiss} more class${st.canMiss === 1 ? "" : "es"} ${S.semester.end ? "this semester" : "in a row"} and stay at ${min}% or above.</div>`;
+    }
+    if (st.missingReport) call += `<div class="callout warn">${st.missingReport} medical absence${st.missingReport === 1 ? " has" : "s have"} no report attached yet.</div>`;
+    // history: held classes that weren't plain present, newest first, then a toggle for all
+    const to = S.semester.end && S.semester.end < todayStr() ? S.semester.end : todayStr();
+    const held = allOccs(S.semester.start, to).filter(o => o.courseId === c.id && isHeld(o, now)).reverse();
+    const hist = held.map(o => {
+      const s = statusOf(o), reps = ((S.marks[o.id] || {}).r || []).length;
+      return `<div class="hrow${s === "present" ? " is-present" : ""}"><div><span class="d">${esc(fmtShort(o.date))}</span> <span class="sub">${o.time ? fmtTime(o.time) : ""}</span>
+        ${s === "medical" ? `<small>${reps ? "Report attached" : "No report yet"}</small>` : ""}</div>
+        <select data-occsel="${esc(o.id)}" aria-label="Status">${Object.keys(STATUS).map(k => `<option value="${k}"${k === s ? " selected" : ""}>${STATUS[k]}</option>`).join("")}</select></div>`;
+    }).join("");
+    return `<div class="panel ccard">
+      <div class="hd"><div><div class="row" style="gap:8px"><span class="dot" style="background:${esc(c.color)}"></span><h3>${esc(c.code)}</h3></div>
+        <div class="sub">${esc(c.name || "")}</div></div>
+        <div style="text-align:right"><div class="big" style="color:${col}">${pctTxt}</div>
+        <div class="sub">${marks === null ? "no classes yet" : `≈ ${marks.toFixed(1)} / ${S.rules.weight} marks`}</div></div></div>
+      <div class="meter" aria-hidden="true"><div style="width:${pct === null ? 0 : (pct * 100).toFixed(1)}%;background:${col}"></div><div class="min" style="left:${min}%"></div></div>
+      <div class="stats">
+        <div><b>${st.held}</b><span>classes held</span></div>
+        <div><b>${st.present}</b><span>attended</span></div>
+        <div><b style="color:var(--absent)">${st.absent}</b><span>absent</span></div>
+        <div><b style="color:var(--medical)">${st.medical}</b><span>medical</span></div>
+      </div>
+      ${call}
+      ${held.length ? `<details class="hist" data-hist="${esc(c.id)}"${openHist.has(c.id) ? " open" : ""}><summary>Class history (${held.length}) · change any status</summary><div>${hist}</div></details>` : ""}
+    </div>`;
+  }).join("");
+}
+const openHist = new Set();
+
+/* ---------- render: Reports ---------- */
+function reportCandidates() {
+  if (!S.semester.start) return [];
+  const showAll = $("rAll").checked, now = Date.now();
+  const to = S.semester.end && S.semester.end < todayStr() ? S.semester.end : todayStr();
+  return allOccs(S.semester.start, to).filter(o => {
+    if (!isHeld(o, now) && !preselect.has(o.id)) return false;
+    const s = statusOf(o);
+    if (preselect.has(o.id)) return true;
+    if (s === "cancelled") return false;
+    return showAll || s === "absent" || s === "medical";
+  }).reverse();
+}
+function renderReportPicker() {
+  const list = reportCandidates();
+  if (!list.length) {
+    $("rPick").innerHTML = `<div class="empty" style="border:0">No absences to cover yet. Mark a class Absent on the Today tab, or tick "Show present classes too".</div>`;
+    return;
+  }
+  $("rPick").innerHTML = list.map(o => {
+    const c = courseOf(o.courseId), s = statusOf(o);
+    const otherRep = ((S.marks[o.id] || {}).r || []).filter(id => id !== editingReport).length;
+    return `<label><input type="checkbox" value="${esc(o.id)}"${preselect.has(o.id) ? " checked" : ""}>
+      <span><b>${esc(c.code)}</b> <span class="d">${esc(fmtShort(o.date))}${o.time ? " " + fmtTime(o.time) : ""}</span>${otherRep ? ` <span class="sub">· has another report</span>` : ""}</span>
+      <span class="pill ${s}">${STATUS[s]}</span></label>`;
+  }).join("");
+}
+async function renderReportList() {
+  if (!S.reports.length) { $("rList").innerHTML = `<div class="empty">No reports yet. Reports you add appear here with the classes they cover.</div>`; return; }
+  const sorted = [...S.reports].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  $("rList").innerHTML = sorted.map(r => `<div class="rep">
+    <a class="thumb" href="#" data-openrep="${esc(r.id)}" id="th-${esc(r.id)}" aria-label="Open ${esc(r.fileName)}">${r.fileType === "application/pdf" ? "PDF" : "…"}</a>
+    <div><div class="row" style="justify-content:space-between"><b>${r.date ? esc(fmtShort(r.date)) : "No date"}</b>
+      <span class="row" style="gap:2px"><button class="mini" data-editrep="${esc(r.id)}">Edit</button><button class="mini danger" data-delrep="${esc(r.id)}">Delete</button></span></div>
+      ${r.note ? `<div class="sub">${esc(r.note)}</div>` : ""}
+      <div class="sub">${esc(r.fileName)} · ${fmtSize(r.size || 0)}</div>
+      <div class="chips">${(r.occ || []).map(id => { const o = occFromId(id), c = courseOf(o.courseId); return `<span class="chip">${esc(c.code)} · ${esc(fmtShort(o.date))}${o.time ? " " + fmtTime(o.time) : ""}</span>`; }).join("") || `<span class="sub">Not linked to any class</span>`}</div>
+    </div></div>`).join("");
+  for (const r of sorted) if (r.fileType && r.fileType.startsWith("image/")) {
+    const u = await fileUrl(r.id), el = $("th-" + r.id);
+    if (u && el) el.innerHTML = `<img src="${u}" alt="">`;
+  }
+}
+function resetReportForm() {
+  editingReport = null; preselect = new Set();
+  $("rForm").reset(); $("rDate").value = todayStr();
+  $("rFormH").textContent = "Add a medical report"; $("rSave").textContent = "Save report";
+  $("rCancel").hidden = true; $("rFileNow").hidden = true; $("rMsg").textContent = "";
+  renderReportPicker();
+}
+
+/* ---------- render: Setup ---------- */
+function renderSetup() {
+  const sm = S.semester;
+  for (const [id, v] of [["sName", sm.name], ["sStart", sm.start], ["sEnd", sm.end], ["sWeight", S.rules.weight], ["sMin", S.rules.min]])
+    if (document.activeElement !== $(id)) $(id).value = v ?? "";
+  renderCourseEd();
+  const offs = Object.keys(S.offDays).sort();
+  $("offList").innerHTML = offs.length ? offs.map(d => `<div><span><span class="mono" style="font-size:12.5px">${esc(fmtShort(d))}</span> ${S.offDays[d] ? `<span class="sub">· ${esc(S.offDays[d])}</span>` : ""}</span><button class="mini" data-rmoff="${esc(d)}">Remove</button></div>`).join("") : `<div class="sub" style="border:0">None yet.</div>`;
+}
+function renderCourseEd() {
+  if (!S.courses.length) { $("courseEd").innerHTML = `<p class="msg" style="margin:0 0 10px">No courses yet. Add each course and the days and times it meets every week.</p>`; return; }
+  $("courseEd").innerHTML = S.courses.map(c => `<div class="course-ed" data-cid="${esc(c.id)}">
+    <div class="r1">
+      <input type="color" value="${esc(c.color)}" data-cf="color" aria-label="Colour">
+      <input type="text" value="${esc(c.code)}" data-cf="code" placeholder="Code, e.g. CSE 4305" maxlength="20" aria-label="Course code">
+      <input type="text" value="${esc(c.name)}" data-cf="name" placeholder="Name (optional)" maxlength="60" aria-label="Course name">
+    </div>
+    ${(c.slots || []).map((sl, i) => `<div class="slot" data-si="${i}">
+      <select data-sf="day" aria-label="Day">${DAY_ORDER.map(d => `<option value="${d}"${+sl.day === d ? " selected" : ""}>${DAYS[d]}</option>`).join("")}</select>
+      <input type="time" value="${esc(sl.time || "")}" data-sf="time" aria-label="Start time">
+      <button class="mini" data-rmslot="${i}" aria-label="Remove this class time">Remove</button></div>`).join("")}
+    <div class="r3"><button class="btn small" data-addslot>+ Add a weekly class time</button><button class="mini danger" data-rmcourse>Delete course</button></div>
+  </div>`).join("");
+}
+
+function render() {
+  $("semLabel").textContent = S.semester.name ? S.semester.name : "";
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
+  for (const t of ["today", "courses", "reports", "setup"]) $("tab-" + t).hidden = t !== tab;
+  if (tab === "today") renderToday();
+  if (tab === "courses") renderCourses();
+  if (tab === "reports") { renderReportPicker(); renderReportList(); }
+  if (tab === "setup") renderSetup();
+}
+function go(t) { tab = t; try { localStorage.setItem(LS_KEY + "-tab", t); } catch (e) {} render(); window.scrollTo({ top: 0 }); }
+
+/* ---------- events ---------- */
+document.querySelector("nav.tabs").addEventListener("click", ev => { const b = ev.target.closest("[data-tab]"); if (b) go(b.dataset.tab); });
+document.addEventListener("click", ev => { const g = ev.target.closest("[data-goto]"); if (g) go(g.dataset.goto); });
+
+// Today
+$("dPrev").addEventListener("click", () => { day = addDaysStr(day, -1); renderToday(); });
+$("dNext").addEventListener("click", () => { day = addDaysStr(day, 1); renderToday(); });
+$("dToday").addEventListener("click", () => { day = todayStr(); renderToday(); });
+$("dPick").addEventListener("change", () => { if ($("dPick").value) { day = $("dPick").value; renderToday(); } });
+$("offChk").addEventListener("change", () => {
+  const o = { ...S.offDays };
+  if ($("offChk").checked) o[day] = ""; else delete o[day];
+  S.offDays = o; save(); renderToday();
+  if ($("offChk").checked) { $("offNote").focus(); toast("Marked as an off day. Its classes don't count."); }
+});
+$("offNote").addEventListener("change", () => { if (S.offDays[day] !== undefined) { S.offDays = { ...S.offDays, [day]: $("offNote").value.trim() }; save(); } });
+$("dayList").addEventListener("click", ev => {
+  const b = ev.target.closest("[data-occ]");
+  if (b) {
+    const s = b.dataset.s, id = b.dataset.occ;
+    setMark(id, s, s === "medical" ? undefined : false);
+    // reports stay linked only while the class is Medical
+    if (s !== "medical") for (const r of S.reports) if ((r.occ || []).includes(id)) r.occ = r.occ.filter(x => x !== id);
+    save(); renderToday();
+    if (s === "absent") toast(`Marked absent · ${courseOf(occFromId(id).courseId).code}`);
+    return;
+  }
+  const a = ev.target.closest("[data-attach]");
+  if (a) { resetReportForm(); preselect = new Set([a.dataset.attach]); $("rDate").value = occFromId(a.dataset.attach).date; go("reports"); renderReportPicker(); $("rFile").focus(); return; }
+  const x = ev.target.closest("[data-rmextra]");
+  if (x) {
+    if (!x.classList.contains("confirm")) { x.classList.add("confirm"); x.textContent = "Tap again to remove"; return; }
+    const id = x.dataset.rmextra;
+    S.extras = S.extras.filter(e => e.id !== id);
+    const m = { ...S.marks }; for (const k in m) if (k.endsWith("@x" + id)) delete m[k]; S.marks = m;
+    save(); renderToday();
+  }
+});
+$("xAdd").addEventListener("click", () => {
+  if (!S.courses.length) return;
+  S.extras = [...S.extras, { id: uid(), courseId: $("xCourse").value, date: day, time: $("xTime").value }];
+  save(); renderToday(); toast("Extra class added");
+});
+
+// Courses (history status changes)
+$("courseCards").addEventListener("change", ev => {
+  const sel = ev.target.closest("[data-occsel]"); if (!sel) return;
+  const id = sel.dataset.occsel, s = sel.value;
+  setMark(id, s, s === "medical" ? undefined : false);
+  if (s !== "medical") for (const r of S.reports) if ((r.occ || []).includes(id)) r.occ = r.occ.filter(x => x !== id);
+  save(); renderCourses();
+});
+$("courseCards").addEventListener("toggle", ev => {
+  const d = ev.target.closest("[data-hist]"); if (!d) return;
+  if (d.open) openHist.add(d.dataset.hist); else openHist.delete(d.dataset.hist);
+}, true);
+
+// Reports
+$("rAll").addEventListener("change", () => {
+  // keep what's ticked when the list changes
+  preselect = new Set([...$("rPick").querySelectorAll("input:checked")].map(i => i.value));
+  renderReportPicker();
+});
+$("rPick").addEventListener("change", () => { preselect = new Set([...$("rPick").querySelectorAll("input:checked")].map(i => i.value)); });
+$("rCancel").addEventListener("click", resetReportForm);
+$("rForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const f = $("rFile").files[0];
+  const ticked = [...$("rPick").querySelectorAll("input:checked")].map(i => i.value);
+  if (!editingReport && !f) { $("rMsg").textContent = "Choose the report photo or PDF first."; return; }
+  if (!ticked.length) { $("rMsg").textContent = "Tick at least one class this report covers."; return; }
+  if (f && f.size > 25 * 1048576) { $("rMsg").textContent = "That file is over 25 MB. Try a smaller photo."; return; }
+  const id = editingReport || uid();
+  const old = S.reports.find(r => r.id === id);
+  if (f) {
+    try { await putFile(id, f); if (urlCache[id]) { URL.revokeObjectURL(urlCache[id]); delete urlCache[id]; } }
+    catch (e) { $("rMsg").textContent = "Couldn't store the file. The browser's storage may be full."; return; }
+  }
+  const rep = { id, date: $("rDate").value, note: $("rNote").value.trim(),
+    fileName: f ? f.name : old.fileName, fileType: f ? f.type : old.fileType, size: f ? f.size : old.size, occ: ticked };
+  // unlink classes this report no longer covers
+  for (const oid of (old ? old.occ : [])) if (!ticked.includes(oid)) {
+    const m = S.marks[oid]; if (!m) continue;
+    const r = (m.r || []).filter(x => x !== id);
+    S.marks = { ...S.marks, [oid]: { s: r.length ? "medical" : "absent", r } };
+  }
+  for (const oid of ticked) {
+    const m = S.marks[oid] || {};
+    S.marks = { ...S.marks, [oid]: { s: "medical", r: [...new Set([...(m.r || []), id])] } };
+  }
+  S.reports = old ? S.reports.map(r => r.id === id ? rep : r) : [...S.reports, rep];
+  save();
+  toast(old ? "Report updated" : `Report saved · ${ticked.length} class${ticked.length === 1 ? "" : "es"} marked Medical`);
+  resetReportForm(); renderReportList();
+});
+$("rList").addEventListener("click", async ev => {
+  const e = ev.target.closest("[data-editrep]");
+  if (e) {
+    const r = S.reports.find(x => x.id === e.dataset.editrep); if (!r) return;
+    editingReport = r.id; preselect = new Set(r.occ || []);
+    $("rFile").value = ""; $("rDate").value = r.date || ""; $("rNote").value = r.note || "";
+    $("rFileNow").hidden = false; $("rFileNow").textContent = `Current file: ${r.fileName}. Choose a new file only to replace it.`;
+    $("rFormH").textContent = "Edit report"; $("rSave").textContent = "Save changes"; $("rCancel").hidden = false; $("rMsg").textContent = "";
+    renderReportPicker(); $("rForm").scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  const d = ev.target.closest("[data-delrep]");
+  if (d) {
+    if (!d.classList.contains("confirm")) { d.classList.add("confirm"); d.textContent = "Tap again to delete"; return; }
+    const id = d.dataset.delrep, r = S.reports.find(x => x.id === id);
+    for (const oid of (r ? r.occ : [])) {
+      const m = S.marks[oid]; if (!m) continue;
+      const rest = (m.r || []).filter(x => x !== id);
+      S.marks = { ...S.marks, [oid]: { s: m.s === "medical" && !rest.length ? "medical" : m.s, r: rest } };
+    }
+    S.reports = S.reports.filter(x => x.id !== id);
+    save(); delFile(id).catch(() => {});
+    toast("Report deleted. Those classes stay Medical, marked as missing a report.");
+    renderReportList(); renderReportPicker();
+  }
+});
+document.addEventListener("click", async ev => {
+  const o = ev.target.closest("[data-openrep]"); if (!o) return;
+  ev.preventDefault();
+  const u = await fileUrl(o.dataset.openrep);
+  if (u) window.open(u, "_blank"); else toast("That file isn't on this device. Restore a backup that includes it.");
+});
+
+// Setup
+$("sName").addEventListener("change", () => { S.semester = { ...S.semester, name: $("sName").value.trim() }; save(); render(); });
+$("sStart").addEventListener("change", () => { S.semester = { ...S.semester, start: $("sStart").value }; save(); });
+$("sEnd").addEventListener("change", () => {
+  if ($("sEnd").value && S.semester.start && $("sEnd").value < S.semester.start) { toast("The last day is before the first day."); $("sEnd").value = S.semester.end; return; }
+  S.semester = { ...S.semester, end: $("sEnd").value }; save();
+});
+$("sWeight").addEventListener("change", () => { const v = +$("sWeight").value; if (v >= 0) { S.rules = { ...S.rules, weight: v }; save(); } });
+$("sMin").addEventListener("change", () => { const v = +$("sMin").value; if (v >= 0 && v <= 100) { S.rules = { ...S.rules, min: v }; save(); } });
+$("cAdd").addEventListener("click", () => {
+  const color = COLORS[S.courses.length % COLORS.length];
+  S.courses = [...S.courses, { id: "c" + uid(), code: "", name: "", color, slots: [{ day: 0, time: "" }] }];
+  save(); renderCourseEd();
+  const eds = $("courseEd").querySelectorAll(".course-ed"); const last = eds[eds.length - 1];
+  if (last) { last.querySelector("[data-cf=code]").focus(); last.scrollIntoView({ behavior: "smooth", block: "center" }); }
+});
+const editCourse = (cid, fn) => { S.courses = S.courses.map(c => c.id === cid ? fn(c) : c); save(); };
+$("courseEd").addEventListener("change", ev => {
+  const box = ev.target.closest("[data-cid]"); if (!box) return;
+  const cid = box.dataset.cid;
+  if (ev.target.dataset.cf) { const f = ev.target.dataset.cf; editCourse(cid, c => ({ ...c, [f]: ev.target.value.trim() })); return; }
+  const slot = ev.target.closest("[data-si]");
+  if (slot && ev.target.dataset.sf) {
+    const i = +slot.dataset.si, f = ev.target.dataset.sf, v = f === "day" ? +ev.target.value : ev.target.value;
+    editCourse(cid, c => ({ ...c, slots: c.slots.map((s, j) => j === i ? { ...s, [f]: v } : s) }));
+  }
+});
+$("courseEd").addEventListener("click", ev => {
+  const box = ev.target.closest("[data-cid]"); if (!box) return;
+  const cid = box.dataset.cid;
+  if (ev.target.closest("[data-addslot]")) { editCourse(cid, c => ({ ...c, slots: [...(c.slots || []), { day: 0, time: "" }] })); renderCourseEd(); return; }
+  const rs = ev.target.closest("[data-rmslot]");
+  if (rs) { const i = +rs.dataset.rmslot; editCourse(cid, c => ({ ...c, slots: c.slots.filter((_, j) => j !== i) })); renderCourseEd(); return; }
+  const rc = ev.target.closest("[data-rmcourse]");
+  if (rc) {
+    if (!rc.classList.contains("confirm")) { rc.classList.add("confirm"); rc.textContent = "Tap again to delete course"; return; }
+    S.courses = S.courses.filter(c => c.id !== cid); save(); renderCourseEd();
+    toast("Course deleted. Its marks stay in backups but no longer count.");
+  }
+});
+$("offList").addEventListener("click", ev => {
+  const b = ev.target.closest("[data-rmoff]"); if (!b) return;
+  const o = { ...S.offDays }; delete o[b.dataset.rmoff]; S.offDays = o; save(); renderSetup();
+});
+
+/* ---------- export / backup ---------- */
+function saveFile(name, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+$("exportBtn").addEventListener("click", () => {
+  if (!S.semester.start) { $("dataMsg").textContent = "Set the semester's first day in Setup first."; return; }
+  const q = s => `"${String(s ?? "").replace(/"/g, '""')}"`, now = Date.now();
+  const to = S.semester.end && S.semester.end < todayStr() ? S.semester.end : todayStr();
+  const rows = allOccs(S.semester.start, to).filter(o => isHeld(o, now)).map(o => {
+    const c = courseOf(o.courseId), s = statusOf(o);
+    const reps = ((S.marks[o.id] || {}).r || []).map(id => (S.reports.find(r => r.id === id) || {}).fileName).filter(Boolean);
+    return [o.date, o.time, c.code, c.name, STATUS[s], reps.join("; "), S.offDays[o.date] || ""].map(q).join(",");
+  });
+  saveFile(`attendance-${todayStr()}.csv`, new Blob([["date,time,course,course name,status,medical report,off day reason", ...rows].join("\n")], { type: "text/csv" }));
+  $("dataMsg").textContent = `CSV downloaded with ${rows.length} classes.`;
+});
+const blobToDataUrl = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
+$("backupBtn").addEventListener("click", async () => {
+  $("dataMsg").textContent = "Preparing backup…";
+  const files = {};
+  for (const r of S.reports) { try { const b = await getFile(r.id); if (b) files[r.id] = await blobToDataUrl(b); } catch (e) {} }
+  saveFile(`attendance-backup-${todayStr()}.json`, new Blob([JSON.stringify({ app: "attendance-tracker", version: 1, state: S, files })], { type: "application/json" }));
+  $("dataMsg").textContent = `Backup downloaded, including ${Object.keys(files).length} report file${Object.keys(files).length === 1 ? "" : "s"}. Keep it somewhere safe, like Google Drive.`;
+});
+$("restoreBtn").addEventListener("click", () => $("restoreFile").click());
+$("restoreFile").addEventListener("change", async ev => {
+  const f = ev.target.files[0]; ev.target.value = ""; if (!f) return;
+  try {
+    const x = JSON.parse(await f.text());
+    if (x.app !== "attendance-tracker" || !x.state) throw new Error("bad");
+    const b = x.state, byId = (a, k = "id") => new Map(a.map(v => [v[k], v]));
+    // merge: anything already here is kept; backup fills in what's missing
+    const courses = byId(S.courses); for (const c of b.courses || []) if (!courses.has(c.id)) courses.set(c.id, c);
+    const extras = byId(S.extras); for (const e of b.extras || []) if (!extras.has(e.id)) extras.set(e.id, e);
+    const reports = byId(S.reports); for (const r of b.reports || []) if (!reports.has(r.id)) reports.set(r.id, r);
+    S = { ...S,
+      semester: S.semester.start ? S.semester : (b.semester || S.semester),
+      rules: S.courses.length ? S.rules : (b.rules || S.rules),
+      courses: [...courses.values()], extras: [...extras.values()], reports: [...reports.values()],
+      marks: { ...(b.marks || {}), ...S.marks }, offDays: { ...(b.offDays || {}), ...S.offDays } };
+    let n = 0;
+    for (const [id, data] of Object.entries(x.files || {})) {
+      try { if (!(await getFile(id))) { await putFile(id, await (await fetch(data)).blob()); n++; } } catch (e) {}
+    }
+    save(); render();
+    toast(`Backup restored${n ? ` with ${n} report file${n === 1 ? "" : "s"}` : ""}`);
+  } catch (e) { toast("That file isn't an Attendance backup."); }
+});
+
+/* ---------- boot ---------- */
+load();
+try { const t = localStorage.getItem(LS_KEY + "-tab"); if (["today", "courses", "reports", "setup"].includes(t)) tab = t; } catch (e) {}
+if (!S.courses.length) tab = "setup";
+$("rDate").value = todayStr();
+render();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { if (tab !== "setup") render(); } });
+window.addEventListener("storage", ev => { if (ev.key === LS_KEY) { load(); render(); } });
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+</script>
+</body>
+</html>
